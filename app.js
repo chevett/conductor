@@ -26,6 +26,7 @@ if (cluster.isMaster) {
 	console.log('gone.');
 	http.createServer(function (request, response) {
 		request.addListener('end', function () {
+			process.stdout.write(".");
 			file.serve(request, response, function (err, result) {
 				if (err){
 					if (err.status === 404 || err.status === 500) {
