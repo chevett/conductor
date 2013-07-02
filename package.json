@@ -1,0 +1,12 @@
+{
+  "name": "conductor",
+  "version": "6.6.6",
+  "private": true,
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "cluster": "~0.7.7",
+    "node-static": "~0.7.0"
+  }
+}
