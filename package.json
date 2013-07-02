@@ -7,7 +7,6 @@
   },
   "dependencies": {
     "cluster": "~0.7.7",
-    "node-static": "git://github.com/chevett/node-static.git#master",
-    "nodeload": "~0.4.0"
+    "node-static": "git://github.com/chevett/node-static.git#master"
   }
 }
