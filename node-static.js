@@ -7,7 +7,6 @@ var fs     = require('fs')
 	, url    = require('url')
 	, path   = require('path')
 	, mime   = require('mime')
-	, util   = require('./util')
 	, cache = Object.create(null);
 
 // Current version
