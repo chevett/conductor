@@ -1,12 +1,16 @@
 {
-  "name": "conductor",
-  "version": "6.6.6",
-  "private": true,
-  "scripts": {
-    "start": "node app.js"
-  },
-  "dependencies": {
-    "cluster": "~0.7.7",
-    "node-static": "git://github.com/chevett/node-static.git#master"
-  }
+	"name": "conductor",
+	"version": "6.6.6",
+	"private": true,
+	"scripts": {
+		"start": "node app.js"
+	},
+	"dependencies": {
+		"cluster": "~0.7.7",
+		"mime": ">=1.2.9"
+	},
+	"repository": {
+		"type": "git",
+		"url": "http://github.com/chevett/conductor"
+	}
 }

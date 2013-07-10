@@ -1,6 +1,6 @@
 var http = require('http'),
 	cluster = require('cluster'),
-	static = require('node-static'),
+	static = require('./node-static/node-static.js'),
 	file = new(static.Server)('./public', {
 		gzip:true
 	}),
