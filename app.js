@@ -48,6 +48,8 @@ if (cluster.isMaster) {
 			process.stdout.write(".");
 			
 			if (cacheItem){
+				console.log('cache hit');
+
 				if (_needsBody(request)){
 					if (cacheItem.hasBody){
 						response.writeHead(200, cacheItem.headersFor200);
@@ -61,12 +63,14 @@ if (cluster.isMaster) {
 					return;
 				}
 			}
-			
+
 			file.serve(request, response, function (err, result) {
-				var newCacheItem = result.cacheItem;
+
+				var newCacheItem = result ? result.cacheItem : null;
 				if (newCacheItem){
 					if (!cacheItem || newCacheItem.hasBody || !cacheItem.hasBody){
-						cache[cacheKey] = result.cacheItem;
+						cache[cacheKey] = newCacheItem;
+						console.log('cache loaded.')
 				
 						setTimeout(function(){
 							// so under very heavy load we stop clearing the cache, right?
