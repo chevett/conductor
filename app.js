@@ -71,7 +71,6 @@ if (cluster.isMaster) {
 
 					if (!cacheItem || newCacheItem.hasBody || !cacheItem.hasBody){
 						cache[cacheKey] = newCacheItem;
-						console.log('cache loaded.')
 				
 						setTimeout(function(){
 							// so under very heavy load we stop clearing the cache, right?
