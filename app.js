@@ -5,7 +5,8 @@ var http = require('http'),
 		gzip:true
 	}),
 	os = require('os'),
-	util = require('util')
+	util = require('util'),
+	url = require('url');
 	
 var cache = Object.create(null);
 var numCPUs = os.cpus().length;
@@ -45,9 +46,10 @@ if (cluster.isMaster) {
 			var cacheKey = _createCacheKey(request),
 				cacheItem = cache[cacheKey];
 			 
-			if (cacheItem){
-				console.log('cache hit');
+			if (cacheKey && cacheItem){
+				console.log('needs body: ' + _needsBody(request));
 
+				console.log(cacheItem);
 				if (_needsBody(request)){
 					if (cacheItem.hasBody){
 						console.log('200 cache hit')
@@ -64,6 +66,9 @@ if (cluster.isMaster) {
 					return;
 				}
 			}
+
+
+			console.log('cache miss');
 
 			file.serve(request, response, function (err, result) {
 

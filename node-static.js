@@ -96,7 +96,7 @@ Server.prototype.serveFile = function (pathname, status, headers, req, res) {
 	return promise;
 };
 
-Server.prototype.finish = function (status, headers, req, res, promise, callback) {
+Server.prototype.finish = function (status, headers, req, res, promise, callback, body) {
 	var result = {
 		status:  status,
 		headers: headers,
@@ -121,19 +121,26 @@ Server.prototype.finish = function (status, headers, req, res, promise, callback
 		}
 	} else {
 		result.cacheItem = {
-			headersFor304:headers,
 			hasBody:false
 		};
+
+		if (result.status == 200){
+			console.log(body);
+			result.cacheItem.headersFor200 = headers;
+			result.cacheItem.headersFor304 = _to304Headers(headers);
+			result.cacheItem.body = body;
+			result.cacheItem.hasBody = true;
+		} else if (result.status == 304){
+			result.cacheItem.headersFor304 = headers;
+			result.cacheItem.hasBody = false;
+
+		}
 
 		// Don't end the request here, if we're streaming;
 		// it's taken care of in `prototype.stream`.
 		if (status !== 200 || req.method !== 'GET') {
-
 			res.writeHead(status, headers);
 			res.end();
-
-			result.cacheItem.headersFor200 = headers;
-			result.cacheItem.headersFor304 = _create304Headers(headers);
 		}
 
 		callback && callback(null, result);
@@ -141,9 +148,7 @@ Server.prototype.finish = function (status, headers, req, res, promise, callback
 	}
 };
 
-function _create304Headers(headers){
-	return {};
-}
+
 
 Server.prototype.servePath = function (pathname, status, headers, req, res, finish) {
 	var that = this,
@@ -187,8 +192,10 @@ Server.prototype.serve = function (req, res, callback) {
 		promise = new(events.EventEmitter),
 		pathname;
 
-	var finish = function (status, headers) {
-		that.finish(status, headers, req, res, promise, callback);
+	var finish = function (status, headers, body, body2) {
+		console.log(body);
+		console.log(body2);
+		that.finish(status, headers, req, res, promise, callback, body);
 	};
 
 	try {
@@ -293,9 +300,9 @@ Server.prototype.respondNoGzip = function (pathname, status, contentType, _heade
 	} else {
 		res.writeHead(status, headers);
 
-		this.stream(pathname, files, new(buffer.Buffer)(stat.size), res, function (e, buffer) {
+		this.stream(pathname, files, new(buffer.Buffer)(stat.size), res, function (e, buffer, offset, body) {
 			if (e) { return finish(500, {}) }
-			finish(status, headers);
+			finish(status, headers, body);
 		});
 	}
 };
@@ -312,32 +319,78 @@ Server.prototype.respond = function (pathname, status, _headers, files, stat, re
 }
 
 Server.prototype.stream = function (pathname, files, buffer, res, callback) {
-	(function streamFile(files, offset) {
-		var file = files.shift();
+	var file = files[0];
+	var bodyparts = [];
+	var bodylength = 0;
+	var offset = 0;
 
-		if (file) {
-			file = file[0] === '/' ? file : path.join(pathname || '.', file);
 
-			// Stream the file to the client
-			fs.createReadStream(file, {
-				flags: 'r',
-				mode: 0666
-			}).on('data', function (chunk) {
-					chunk.copy(buffer, offset);
-					offset += chunk.length;
-				}).on('close', function () {
-					streamFile(files, offset);
-				}).on('error', function (err) {
-					callback(err);
-					console.error(err);
-				}).pipe(res, { end: false });
-		} else {
-			res.end();
-			console.log('wtf')
-			callback(null, buffer, offset);
-		}
-	})(files.slice(0), 0);
+
+	if (file) {
+		file = file[0] === '/' ? file : path.join(pathname || '.', file);
+
+		// Stream the file to the client
+		fs.createReadStream(file, {
+			flags: 'r',
+			mode: 0666
+		}).on('data', function (chunk) {
+				chunk.copy(buffer, offset);
+				offset += chunk.length;
+
+				bodyparts.push(chunk);
+				bodylength += chunk.length;
+
+			}).on('close', function () {
+				res.end();
+				console.log('getting body')
+
+				var body = new Buffer(bodylength);
+				var bodyPos=0;
+				for (var i=0; i < bodyparts.length; i++) {
+					bodyparts[i].copy(body, bodyPos, 0, bodyparts[i].length);
+					bodyPos += bodyparts[i].length;
+				}
+
+
+				callback(null, buffer, offset, body);
+			}).on('error', function (err) {
+				callback(err);
+				console.error(err);
+			}).pipe(res, { end: false });
+	} else {
+		res.end();
+		console.log('wtf')
+		callback(null, buffer, offset);
+	}
+
 };
+
+function extend (other) {
+	var target =  {};
+	for (var prop in Object.keys(other)) {
+		target[prop] = other[prop];
+	}
+	return target;
+}
+
+function _to304Headers(headers){
+	headers = extend({}, headers);
+
+	// 304 response should not contain entity headers
+	['Content-Encoding',
+		'Content-Language',
+		'Content-Length',
+		'Content-Location',
+		'Content-MD5',
+		'Content-Range',
+		'Content-Type',
+		'Expires',
+		'Last-Modified'].forEach(function(entityHeader) {
+			delete headers[entityHeader];
+		});
+
+	return headers;
+}
 
 // Exports
 exports.Server       = Server;
