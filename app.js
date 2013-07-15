@@ -1,6 +1,6 @@
 var http = require('http'),
 	cluster = require('cluster'),
-	static = require('./node-static.js'),
+	static = require('./node-static'),
 	file = new(static.Server)('./public', {
 		gzip:true
 	}),
@@ -25,7 +25,7 @@ function _createCacheKey(request){
 }
 
 function _needsBody(request){
-	return true;
+	return !request.headers['if-none-match'] && !request.headers['if-modified-since'];
 }
 
 if (cluster.isMaster) {
@@ -45,19 +45,20 @@ if (cluster.isMaster) {
 			var cacheKey = _createCacheKey(request),
 				cacheItem = cache[cacheKey];
 			 
-			process.stdout.write(".");
-			
 			if (cacheItem){
 				console.log('cache hit');
 
 				if (_needsBody(request)){
 					if (cacheItem.hasBody){
+						console.log('200 cache hit')
+
 						response.writeHead(200, cacheItem.headersFor200);
 						response.write(cacheItem.body);
 						response.end();
 						return;
 					}
 				} else {
+					console.log('304 cache hit')
 					response.writeHead(304, cacheItem.headersFor304);
 					response.end();
 					return;
@@ -68,6 +69,7 @@ if (cluster.isMaster) {
 
 				var newCacheItem = result ? result.cacheItem : null;
 				if (newCacheItem){
+
 					if (!cacheItem || newCacheItem.hasBody || !cacheItem.hasBody){
 						cache[cacheKey] = newCacheItem;
 						console.log('cache loaded.')

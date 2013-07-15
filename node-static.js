@@ -3,14 +3,14 @@
 
 var fs     = require('fs')
 	, events = require('events')
+	, buffer = require('buffer')
 	, http   = require('http')
 	, url    = require('url')
 	, path   = require('path')
-	, mime   = require('mime')
-	, cache = Object.create(null);
+	, mime   = require('mime');
 
 // Current version
-var version = [0, 6, 9];
+var version = [0, 7, 0];
 
 Server = function (root, options) {
 	if (root && (typeof(root) === 'object')) { options = root; root = null }
@@ -48,19 +48,40 @@ Server = function (root, options) {
 	}
 };
 
+Server.prototype.serveDir = function (pathname, req, res, finish) {
+	var htmlIndex = path.join(pathname, 'index.html'),
+		that = this;
+
+	fs.stat(htmlIndex, function (e, stat) {
+		if (!e) {
+			var status = 200;
+			var headers = {};
+			var originalPathname = decodeURI(url.parse(req.url).pathname);
+			if (originalPathname.length && originalPathname.charAt(originalPathname.length - 1) !== '/') {
+				return finish(301, { 'Location': originalPathname + '/' });
+			} else {
+				that.respond(null, status, headers, [htmlIndex], stat, req, res, finish);
+			}
+		} else {
+			// Stream a directory of files as a single file.
+			fs.readFile(path.join(pathname, 'index.json'), function (e, contents) {
+				if (e) { return finish(404, {}) }
+				var index = JSON.parse(contents);
+				streamFiles(index.files);
+			});
+		}
+	});
+	function streamFiles(files) {
+		util.mstat(pathname, files, function (e, stat) {
+			if (e) { return finish(404, {}) }
+			that.respond(pathname, 200, {}, files, stat, req, res, finish);
+		});
+	}
+};
 
 Server.prototype.serveFile = function (pathname, status, headers, req, res) {
 	var that = this;
 	var promise = new(events.EventEmitter);
-	var cacheKey = pathname;
-
-
-//	if (cache[cacheKey]){
-//		console.log('from da cache.')
-//		res.write(200, cache[cacheKey]);
-//		res.end();
-//		return;
-//	}
 
 	pathname = this.resolve(pathname);
 
@@ -68,7 +89,7 @@ Server.prototype.serveFile = function (pathname, status, headers, req, res) {
 		if (e) {
 			return promise.emit('error', e);
 		}
-		that.respond(cacheKey, null, status, headers, [pathname], stat, req, res, function (status, headers) {
+		that.respond(null, status, headers, [pathname], stat, req, res, function (status, headers) {
 			that.finish(status, headers, req, res, promise);
 		});
 	});
@@ -81,6 +102,8 @@ Server.prototype.finish = function (status, headers, req, res, promise, callback
 		headers: headers,
 		message: http.STATUS_CODES[status]
 	};
+
+	console.log('in finish')
 
 	headers['server'] = this.serverInfo;
 
@@ -97,36 +120,34 @@ Server.prototype.finish = function (status, headers, req, res, promise, callback
 			}
 		}
 	} else {
+		result.cacheItem = {
+			headersFor304:headers,
+			hasBody:false
+		};
+
 		// Don't end the request here, if we're streaming;
 		// it's taken care of in `prototype.stream`.
 		if (status !== 200 || req.method !== 'GET') {
+
 			res.writeHead(status, headers);
 			res.end();
+
+			result.cacheItem.headersFor200 = headers;
+			result.cacheItem.headersFor304 = _create304Headers(headers);
 		}
+
 		callback && callback(null, result);
 		promise.emit('success', result);
 	}
 };
 
+function _create304Headers(headers){
+	return {};
+}
+
 Server.prototype.servePath = function (pathname, status, headers, req, res, finish) {
 	var that = this,
 		promise = new(events.EventEmitter);
-
-	var ogPathName = pathname;
-
-
-//	if (cache[ogPathName]){
-//		console.log('from da cache.')
-//		res.write(cache[ogPathName]);
-//		res.end();
-//		return;
-//	}
-//	else {
-//		console.log('NOT from da cache.')
-//
-//
-//	}
-
 
 	pathname = this.resolve(pathname);
 
@@ -143,7 +164,9 @@ Server.prototype.servePath = function (pathname, status, headers, req, res, fini
 			if (e) {
 				finish(404, {});
 			} else if (stat.isFile()) {      // Stream a single file.
-				that.respond(ogPathName, null, status, headers, [pathname], stat, req, res, finish);
+				that.respond(null, status, headers, [pathname], stat, req, res, finish);
+			} else if (stat.isDirectory()) { // Stream a directory of files.
+				that.serveDir(pathname, req, res, finish);
 			} else {
 				finish(400, {});
 			}
@@ -204,7 +227,7 @@ Server.prototype.gzipOk = function(req, contentType) {
 /* Send a gzipped version of the file if the options and the client indicate gzip is enabled and
  * we find a .gz file mathing the static resource requested. 
  */
-Server.prototype.respondGzip = function(cacheKey, pathname, status, contentType, _headers, files, stat, req, res, finish) {
+Server.prototype.respondGzip = function(pathname, status, contentType, _headers, files, stat, req, res, finish) {
 	var that = this;
 	if(files.length == 1 && this.gzipOk(req)) {
 		var gzFile = files[0] + ".gz";
@@ -219,15 +242,15 @@ Server.prototype.respondGzip = function(cacheKey, pathname, status, contentType,
 			} else {
 				//console.log('gzip file not found or error finding it', gzFile, String(e), stat.isFile());
 			}
-			that.respondNoGzip(cacheKey, pathname, status, contentType, _headers, files, stat, req, res, finish);
+			that.respondNoGzip(pathname, status, contentType, _headers, files, stat, req, res, finish);
 		});
 	} else {
 		// Client doesn't want gzip or we're sending multiple files
-		that.respondNoGzip(cacheKey, pathname, status, contentType, _headers, files, stat, req, res, finish);
+		that.respondNoGzip(pathname, status, contentType, _headers, files, stat, req, res, finish);
 	}
 }
 
-Server.prototype.respondNoGzip = function (cacheKey, pathname, status, contentType, _headers, files, stat, req, res, finish) {
+Server.prototype.respondNoGzip = function (pathname, status, contentType, _headers, files, stat, req, res, finish) {
 	var mtime           = Date.parse(stat.mtime),
 		key             = pathname || files[0],
 		headers         = {},
@@ -247,9 +270,6 @@ Server.prototype.respondNoGzip = function (cacheKey, pathname, status, contentTy
 	headers['Content-Length'] = stat.size;
 
 	for (var k in _headers) { headers[k] = _headers[k] }
-
-	console.log(cacheKey);
-	console.log(cache[cacheKey]);
 
 	// Conditional GET
 	// If the "If-Modified-Since" or "If-None-Match" headers
@@ -273,64 +293,50 @@ Server.prototype.respondNoGzip = function (cacheKey, pathname, status, contentTy
 	} else {
 		res.writeHead(status, headers);
 
-		this.stream(cacheKey, pathname, files, res, function (e, buffer) {
+		this.stream(pathname, files, new(buffer.Buffer)(stat.size), res, function (e, buffer) {
 			if (e) { return finish(500, {}) }
 			finish(status, headers);
-			cache[cacheKey].headers = headers;
 		});
 	}
 };
 
-Server.prototype.respond = function (cacheKey, pathname, status, _headers, files, stat, req, res, finish) {
+Server.prototype.respond = function (pathname, status, _headers, files, stat, req, res, finish) {
 	var contentType = _headers['Content-Type'] ||
 		mime.lookup(files[0]) ||
 		'application/octet-stream';
 	if(this.options.gzip) {
-		this.respondGzip(cacheKey, pathname, status, contentType, _headers, files, stat, req, res, finish);
+		this.respondGzip(pathname, status, contentType, _headers, files, stat, req, res, finish);
 	} else {
-		this.respondNoGzip(cacheKey, pathname, status, contentType, _headers, files, stat, req, res, finish);
+		this.respondNoGzip(pathname, status, contentType, _headers, files, stat, req, res, finish);
 	}
 }
 
-Server.prototype.stream = function (cacheKey, pathname, files, res, callback) {
-	var file = files[0];
-	var bodyparts = [];
-	var bodylength = 0;
+Server.prototype.stream = function (pathname, files, buffer, res, callback) {
+	(function streamFile(files, offset) {
+		var file = files.shift();
 
-	if (file) {
-		file = file[0] === '/' ? file : path.join(pathname || '.', file);
+		if (file) {
+			file = file[0] === '/' ? file : path.join(pathname || '.', file);
 
-		cache[cacheKey] = [];
-
-		process.stdout.write("!");
-
-		// Stream the file to the client
-		fs.createReadStream(file, {
-			flags: 'r',
-			mode: 0666
-		}).on('error', function (err) {
-				callback(err);
-				console.error(err);
-			})
-			.on('data', function(chunk){
-				bodyparts.push(chunk);
-				bodylength += chunk.length;
-			})
-			.on('end', function(){
-				var body = new Buffer(bodylength);
-				var bodyPos=0;
-				for (var i=0; i < bodyparts.length; i++) {
-					bodyparts[i].copy(body, bodyPos, 0, bodyparts[i].length);
-					bodyPos += bodyparts[i].length;
-				}
-				console.log('wtf')
-				cache[cacheKey] = body;
-			})
-			.pipe(res);
-
-	}
-
-
+			// Stream the file to the client
+			fs.createReadStream(file, {
+				flags: 'r',
+				mode: 0666
+			}).on('data', function (chunk) {
+					chunk.copy(buffer, offset);
+					offset += chunk.length;
+				}).on('close', function () {
+					streamFile(files, offset);
+				}).on('error', function (err) {
+					callback(err);
+					console.error(err);
+				}).pipe(res, { end: false });
+		} else {
+			res.end();
+			console.log('wtf')
+			callback(null, buffer, offset);
+		}
+	})(files.slice(0), 0);
 };
 
 // Exports
