@@ -103,7 +103,6 @@ Server.prototype.finish = function (status, headers, req, res, promise, callback
 		message: http.STATUS_CODES[status]
 	};
 
-	console.log('in finish')
 
 	headers['server'] = this.serverInfo;
 
@@ -125,7 +124,6 @@ Server.prototype.finish = function (status, headers, req, res, promise, callback
 		};
 
 		if (result.status == 200){
-			console.log(body);
 			result.cacheItem.headersFor200 = headers;
 			result.cacheItem.headersFor304 = _to304Headers(headers);
 			result.cacheItem.body = body;
@@ -193,8 +191,6 @@ Server.prototype.serve = function (req, res, callback) {
 		pathname;
 
 	var finish = function (status, headers, body, body2) {
-		console.log(body);
-		console.log(body2);
 		that.finish(status, headers, req, res, promise, callback, body);
 	};
 
@@ -342,7 +338,6 @@ Server.prototype.stream = function (pathname, files, buffer, res, callback) {
 
 			}).on('close', function () {
 				res.end();
-				console.log('getting body')
 
 				var body = new Buffer(bodylength);
 				var bodyPos=0;
@@ -359,7 +354,6 @@ Server.prototype.stream = function (pathname, files, buffer, res, callback) {
 			}).pipe(res, { end: false });
 	} else {
 		res.end();
-		console.log('wtf')
 		callback(null, buffer, offset);
 	}
 

@@ -47,12 +47,9 @@ if (cluster.isMaster) {
 				cacheItem = cache[cacheKey];
 			 
 			if (cacheKey && cacheItem){
-				console.log('needs body: ' + _needsBody(request));
 
-				console.log(cacheItem);
 				if (_needsBody(request)){
 					if (cacheItem.hasBody){
-						console.log('200 cache hit')
 
 						response.writeHead(200, cacheItem.headersFor200);
 						response.write(cacheItem.body);
@@ -60,15 +57,12 @@ if (cluster.isMaster) {
 						return;
 					}
 				} else {
-					console.log('304 cache hit')
 					response.writeHead(304, cacheItem.headersFor304);
 					response.end();
 					return;
 				}
 			}
 
-
-			console.log('cache miss');
 
 			file.serve(request, response, function (err, result) {
 
