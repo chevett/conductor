@@ -66,20 +66,6 @@ if (cluster.isMaster) {
 
 			file.serve(request, response, function (err, result) {
 
-				var newCacheItem = result ? result.cacheItem : null;
-				if (newCacheItem){
-
-					if (!cacheItem || newCacheItem.hasBody || !cacheItem.hasBody){
-						cache[cacheKey] = newCacheItem;
-				
-						setTimeout(function(){
-							// so under very heavy load we stop clearing the cache, right?
-							delete cache[cacheKey];
-						}, 60*1000);
-					}
-				}
-				
-				
 				if (err){
 					if (err.status === 404 || err.status === 500) {
 						file.serveFile(util.format('/%d.html', err.status), err.status, {}, request, response);
