@@ -10,7 +10,7 @@ var http = require('http'),
 	
 var cache = Object.create(null);
 var numCPUs = os.cpus().length;
-var port = parseInt(process.argv[2] || 3000);
+var port = parseInt(process.argv[2] || 9000);
 
 console.log('going...')
 
